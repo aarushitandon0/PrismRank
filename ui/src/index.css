@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary:     #F5ECD7;
+  --bg-secondary:   #EDE0C4;
+  --bg-card:        #FAF4E8;
+  --ink:            #2C1810;
+  --ink-muted:      #6B4F3A;
+  --ink-faint:      #A08060;
+  --accent:         #E8440A;
+  --accent-hover:   #C7340A;
+  --accent-glow:    rgba(232, 68, 10, 0.08);
+  --gold:           #8B6914;
+  --gold-light:     rgba(139, 105, 20, 0.10);
+  --rule:           #D4C4A0;
+  --ok-green:       #4A7C59;
+  --ok-bg:          rgba(74, 124, 89, 0.10);
+  --warn-orange:    #C8511B;
+  --warn-bg:        rgba(200, 81, 27, 0.10);
+  --sidebar-bg:     #2C1810;
+  --sidebar-text:   #F5ECD7;
+  --sidebar-accent: #E8440A;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  width: 100%;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  background: var(--bg-primary);
+  color: var(--ink);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+::placeholder {
+  color: var(--ink-faint);
+  opacity: 1;
+}
+
+textarea, input, select {
+  color-scheme: light;
+  font-family: 'Inter', system-ui, sans-serif;
+  outline: none;
+  color: var(--ink);
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 3px; }
+
+/* ── Keyframes ── */
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1);   opacity: 1;   }
+  50%       { transform: scale(1.5); opacity: 0.4; }
+}
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes shimmer-warm {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+.card-in           { animation: card-in 400ms ease-out both; }
+.animate-pulse-dot { animation: pulse-dot 2.5s ease-in-out infinite; }
+.animate-spin-slow { animation: spin-slow 4s linear infinite; }
+.animate-fade-up   { animation: fade-up 0.3s ease forwards; }
+.animate-msg-in    { animation: msg-in 0.2s ease forwards; }
+
+.shimmer-bar {
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    rgba(232, 68, 10, 0.30) 40%,
+    var(--accent) 80%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-warm 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

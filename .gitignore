@@ -1,0 +1,66 @@
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Virtual environment ────────────────────────────────────────
+venv/
+.venv/
+env/
+.env
+
+# ── Environment variables ──────────────────────────────────────
+.env
+.env.*
+*.env
+
+# ── Data (large files, sensitive) ─────────────────────────────
+data/candidates.jsonl
+data/*.jsonl
+data/*.csv
+data/*.parquet
+
+# ── Model weights and embedding cache ─────────────────────────
+output/embedding_cache/
+*.npy
+*.faiss
+*.bin
+*.pt
+*.ckpt
+*.safetensors
+
+# ── Pipeline outputs ───────────────────────────────────────────
+output/submission.csv
+output/bias_report.json
+output/interview_pack.json
+
+# ── Frontend build ─────────────────────────────────────────────
+src/frontend/dist/
+ui/node_modules/
+ui/dist/
+
+# ── OS ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editors ───────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.swp
+*.sln
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+logs/
