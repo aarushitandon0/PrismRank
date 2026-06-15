@@ -722,10 +722,3 @@ honeypot_score
 ```
 
 ---
-
-## Competition Entry
-
-Submitted to the **India Runs Data & AI Challenge** by Redrob.
-Category: Intelligent Candidate Discovery and Ranking.
-Dataset: 100,000 synthetic candidate profiles with embedded honeypots.
-Target role: Senior AI Engineer — Redrob AI Platform (embeddings, vector search, ranking, LLM evaluation).
