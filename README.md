@@ -1,23 +1,12 @@
----
-title: PrismRank
-emoji: 🎯
-colorFrom: orange
-colorTo: yellow
-sdk: docker
-app_port: 7860
-pinned: false
----
-
 # PrismRank
 
 **AI-native candidate ranking and talent intelligence system.**
-Built for the [India Runs Data & AI Challenge](https://indiaruns.in) — Intelligent Candidate Discovery & Ranking by Redrob.
 
 ---
 
 ## Overview
 
-PrismRank is a production-grade talent intelligence pipeline that ingests 100,000+ structured candidate profiles, runs a three-stage retrieval and re-ranking system, and surfaces a bias-audited shortlist of the top 100 candidates for a given job description.
+PrismRank is a production-grade talent intelligence pipeline that ingests 100,000+ structured candidate profiles, runs a three-stage retrieval and re-ranking system, and surfaces a bias-audited shortlist of the top candidates for a given job description.
 
 The system was designed around the specific failure modes embedded in the challenge dataset: keyword-stuffed profiles, honeypot candidates with statistically impossible signals, and consulting-only careers claiming deep AI/ML expertise. Every scoring component directly targets at least one of these failure modes.
 
@@ -33,65 +22,6 @@ The system was designed around the specific failure modes embedded in the challe
 - Automated interview pack generation (5 tailored questions per top-20 candidate)
 - Full React dashboard with recruiter chat, persona explorer, and bias report viewer
 - Graceful degraded mode when no Gemini API key is present
-
----
-
-## Two Execution Modes
-
-PrismRank ships two distinct entrypoints with different purposes:
-
-| Entrypoint | Purpose | Uses Gemini? | Network? |
-|---|---|---|---|
-| `scripts/rank.py` | Produces the official submission CSV. This is what gets reproduced at Stage 3. | No | No |
-| `src/api/` + `ui/` (interactive dashboard) | Live demo and exploration: recruiter chat, persona naming, interview pack generation, richer JD parsing. Not used to produce the scored submission. | Optional | Optional |
-
-`scripts/rank.py` and everything it imports (`candidate_processor`, `embedder`, `behavioral`, `trajectory`, `honeypot`, `jd_local`, `local_scorer`, `fusion`) contain zero references to `google.generativeai` or any other hosted LLM SDK. This was verified by inspecting `sys.modules` after importing the script: only the empty `google` namespace package loads (a transitive stub from the torch/protobuf dependency chain), never `google.generativeai`.
-
-In place of Gemini's `skill_alignment`, `experience_fit`, and `culture_fit` scores, `scripts/rank.py` substitutes local, equally real signals (see `src/pipeline/local_scorer.py`):
-
-- `skill_alignment` -- the FAISS cosine similarity score already computed during retrieval, not a placeholder
-- `experience_fit` -- a piecewise function comparing the candidate's years of experience against the JD's extracted seniority floor
-- `culture_fit` -- keyword overlap between the candidate's role history and the JD's extracted culture signals
-
-Every other component of the fusion score (the JD-specific multipliers, honeypot suppression, trajectory boost, behavioral scoring) was already fully local and rule-based, so it carries over to the compliant script unchanged.
-
----
-
-## Compute Constraint Compliance
-
-The hackathon requires the ranking step to complete in 5 minutes wall-clock, on CPU only, with no network calls, under 16GB RAM and 5GB disk. Measured on the full 100,000-candidate dataset:
-
-| Constraint | Limit | Measured | How it's satisfied |
-|---|---|---|---|
-| Runtime | <= 5 min | ~87s internal / ~2m41s wall-clock including Python startup | Two-phase design: an untimed pre-computation pass warms three disk caches, so the timed run only ever hits warm caches |
-| Memory | <= 16 GB | Well under (single CPU process, no batching beyond 100K dicts + a 1,000 x 384 float32 matrix) | No GPU tensors, no full-dataset embedding held in memory at once |
-| Compute | CPU only | CPU only | `faiss-cpu`, CPU-only PyTorch build, scikit-learn -- no CUDA dependency anywhere |
-| Network | Off | Zero calls | `scripts/rank.py`'s import graph never touches `google.generativeai`; verified via `sys.modules` inspection |
-| Disk | <= 5 GB | A few hundred MB (cached candidate pickle, TF-IDF vectorizer + sparse matrix, 1,000 x 384 embedding cache) | Caches are content-keyed by file size/mtime, not duplicated per run |
-
-### Why two scripts, not one
-
-Fitting a TF-IDF vectorizer over 100,000 documents from scratch took roughly 4 minutes by itself in testing, which alone would blow the 5-minute budget before any retrieval or scoring even started. The hackathon spec explicitly allows for this: *"pre-computation may exceed the 5-minute window, but the ranking step that produces the CSV must complete within it."*
-
-```bash
-# Step 1 -- one-time setup, NOT timed. Run this once.
-python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
-python scripts/precompute.py --candidates data/candidates.jsonl --jd data/job_description.txt
-
-# Step 2 -- the timed ranking step. Completes in well under 5 minutes.
-python scripts/rank.py --candidates data/candidates.jsonl --jd data/job_description.txt --out submission.csv
-```
-
-`scripts/precompute.py` warms three caches under `output/precompute_cache/` and `output/embedding_cache/`:
-1. The parsed candidate list (pickled, skips re-parsing 100,000 JSON lines)
-2. The fitted TF-IDF vectorizer and sparse matrix over the candidate corpus (the single most expensive step; cached so the timed run only does a fast `.transform()` on the JD)
-3. Sentence-transformer embeddings for the JD-relevant candidate subset (via `src/pipeline/embedder.py`'s existing content-keyed cache)
-
-Caches are keyed by the candidates file's size and modification time, so they invalidate automatically if the dataset changes, and re-running `precompute.py` is a fast no-op once warm.
-
-### Honeypot exclusion
-
-`scripts/rank.py` does not rely solely on the honeypot suppression multiplier. Any candidate with `honeypot_score >= 0.55` is explicitly excluded from the top 100 before ranks are assigned, with a sorted-by-score backfill if fewer than 100 clean candidates remain in the retrieval pool. This guarantees the submission's honeypot rate stays under the 10% Stage 3 disqualification threshold rather than depending on score suppression alone.
 
 ---
 
@@ -601,19 +531,15 @@ prismrank/
       candidate_processor.py    # JSONL parsing, profile text builder, feature extractor
       embedder.py               # TF-IDF pre-filter, sentence-transformer encoding,
                                 # FAISS index builder, embedding cache management
-      precompute_cache.py       # Disk caches for the compliant ranker (candidates, TF-IDF)
-      jd_local.py                # LOCAL JD parser, zero LLM SDK imports (used by rank.py)
-      jd_parser.py              # JD parsing via Gemini; regex fallback (dashboard only)
-      local_scorer.py            # LOCAL substitutes for skill_alignment/experience_fit/
-                                # culture_fit + fact-grounded reasoning generator
-      llm_scorer.py             # Gemini re-ranking, batched 10 candidates/call (dashboard only)
+      jd_parser.py              # JD parsing via Gemini; regex fallback
+      llm_scorer.py             # Gemini re-ranking, batched 10 candidates/call
       behavioral.py             # 12-signal Redrob behavioral scorer
       trajectory.py             # Velocity x tier progression x tenure scorer
       honeypot.py               # 8-signal trap candidate detector
       fusion.py                 # Weighted fusion, JD multipliers, honeypot suppression
-      clustering.py             # KMeans clustering, Gemini archetype naming (dashboard only)
+      clustering.py             # KMeans clustering, Gemini archetype naming
       bias_audit.py             # Gini coefficient, skew ratio fairness audit
-      interview_gen.py          # Interview pack generation (dashboard only)
+      interview_gen.py          # Interview pack generation, top-20 candidates
 
     frontend/
       dist/                     # Compiled React app (served by FastAPI at /)
@@ -626,20 +552,15 @@ prismrank/
     vite.config.js              # Dev proxy to :8080, outDir to ../src/frontend/dist
 
   scripts/
-    rank.py                     # COMPLIANT ranking entrypoint -- produces the submission CSV.
-                                # Zero network calls, zero LLM SDK imports, CPU only.
-    precompute.py                # Untimed cache-warming pass, run once before rank.py
-    run_pipeline.py             # Gemini-enabled standalone CLI demo runner (not for submission)
+    run_pipeline.py             # Standalone pipeline runner (no API)
 
   output/
     submission.csv              # Top-100 ranked candidates with scores
     bias_report.json            # Full fairness audit
     interview_pack.json         # 5 questions x top-20 candidates
     embedding_cache/            # Cached .npy embedding arrays
-    precompute_cache/            # Cached parsed candidates + TF-IDF vectorizer/matrix
 
   requirements.txt
-  submission_metadata.yaml
   .gitignore
   README.md
 ```
@@ -648,24 +569,7 @@ prismrank/
 
 ## Setup
 
-### Reproducing the submission CSV (the only path that matters for Stage 3)
-
-```bash
-pip install -r requirements.txt
-
-# Place candidates.jsonl and job_description.txt in data/
-
-# One-time, untimed setup
-python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
-python scripts/precompute.py --candidates data/candidates.jsonl --jd data/job_description.txt
-
-# The timed ranking step -- completes in well under 5 minutes
-python scripts/rank.py --candidates data/candidates.jsonl --jd data/job_description.txt --out submission.csv
-```
-
-No Node.js, no Gemini API key, and no network access are required for this path. The sections below cover the optional interactive dashboard.
-
-### Prerequisites (dashboard only)
+### Prerequisites
 
 - Python 3.11+
 - Node.js 18+ (for frontend build)
@@ -818,10 +722,3 @@ honeypot_score
 ```
 
 ---
-
-## Competition Entry
-
-Submitted to the **India Runs Data & AI Challenge** by Redrob.
-Category: Intelligent Candidate Discovery and Ranking.
-Dataset: 100,000 synthetic candidate profiles with embedded honeypots.
-Target role: Senior AI Engineer — Redrob AI Platform (embeddings, vector search, ranking, LLM evaluation).
