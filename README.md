@@ -1,3 +1,13 @@
+---
+title: PrismRank
+emoji: 🎯
+colorFrom: orange
+colorTo: yellow
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # PrismRank
 
 **AI-native candidate ranking and talent intelligence system.**
