@@ -71,6 +71,7 @@ def _extract_features(raw: dict) -> dict:
         "skills_list": skills_list,
         "skill_assessment_scores": redrob.get("skill_assessment_scores", {}),
         "education_tier_score": edu_tier,
+        "education": education,
         "career_history": career,
         "avg_tenure_months": avg_tenure,
         "open_to_work": bool(redrob.get("open_to_work_flag", False)),
@@ -96,7 +97,6 @@ def process_all_candidates(candidates_path: str) -> list[dict]:
                 "candidate_id": raw.get("candidate_id", ""),
                 "profile_text": _build_profile_text(raw),
                 "features": _extract_features(raw),
-                "raw": raw,
             })
 
     print(f"[CandidateProcessor] Loaded {len(candidates):,} candidates from {path.name}")

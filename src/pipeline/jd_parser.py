@@ -1,9 +1,7 @@
 import json
 import re
-import google.generativeai as genai
-from src.config import GEMINI_API_KEY, MODEL_NAME
-
-genai.configure(api_key=GEMINI_API_KEY)
+from src.config import GROQ_API_KEY, MODEL_NAME
+from src.llm_client import generate_content
 
 _SYSTEM_PROMPT = (
     "You are an expert technical recruiter with 15 years of experience hiring across India's "
@@ -34,25 +32,24 @@ def parse_jd(jd_text: str) -> dict:
         print("[JD Parser] Detected Redrob challenge JD — using pre-parsed ground truth.")
         return _JD_HARDCODED
 
+    if not GROQ_API_KEY:
+        print("[JD Parser] No GROQ_API_KEY — using rule-based fallback.")
+        return _rule_based_fallback(jd_text)
+
     try:
-        model = genai.GenerativeModel(
-            model_name=MODEL_NAME,
-            system_instruction=_SYSTEM_PROMPT,
-        )
         prompt = (
             f"Analyze this job description and return ONLY a valid JSON object matching this schema:\n"
             f"{_JD_SCHEMA}\n\n"
             f"Return ONLY JSON — no markdown fences, no explanation.\n\n"
             f"Job Description:\n{jd_text}"
         )
-        response = model.generate_content(prompt)
-        raw = response.text.strip()
+        raw = generate_content(prompt, system_instruction=_SYSTEM_PROMPT, model=MODEL_NAME).strip()
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
         parsed = json.loads(raw)
         return _validate_and_fill(parsed)
     except Exception as e:
-        print(f"[JD Parser] Gemini failed ({e}), using rule-based fallback.")
+        print(f"[JD Parser] Groq failed ({e}), using rule-based fallback.")
         return _rule_based_fallback(jd_text)
 
 

@@ -27,7 +27,7 @@ def get_model() -> SentenceTransformer:
 
 def prefilter_tfidf(jd_text: str, profile_texts: list[str], k: int = PREFILTER_K) -> list[int]:
     """Fast lexical pre-filter: returns indices of top-k candidates by TF-IDF cosine similarity."""
-    print(f"[Embedder] TF-IDF pre-filtering {len(profile_texts):,} → top {k}...")
+    print(f"[Embedder] TF-IDF pre-filtering {len(profile_texts):,} -> top {k}...")
     corpus = [jd_text] + profile_texts
     vec = TfidfVectorizer(
         max_features=20_000,
@@ -48,13 +48,21 @@ def prefilter_tfidf(jd_text: str, profile_texts: list[str], k: int = PREFILTER_K
 def build_index(
     profile_texts: list[str],
     jd_text: str = "",
+    preselected_indices: list[int] | None = None,
 ) -> tuple[faiss.Index, np.ndarray, list[int]]:
     """
     Returns (index, embeddings, original_indices).
-    original_indices maps position-in-index → position-in-profile_texts.
+    original_indices maps position-in-index -> position-in-profile_texts.
+
+    If preselected_indices is given, the internal TF-IDF prefilter is skipped
+    entirely. Used by scripts/rank.py, which fits the TF-IDF vectorizer once via
+    src.pipeline.precompute_cache and reuses it across runs, since refitting a
+    vectorizer over 100K documents is the single most expensive step in the
+    pipeline and is unnecessary to repeat on every invocation.
     """
-    # Stage 1: TF-IDF pre-filter
-    if len(profile_texts) > PREFILTER_K and jd_text:
+    if preselected_indices is not None:
+        selected_indices = preselected_indices
+    elif len(profile_texts) > PREFILTER_K and jd_text:
         selected_indices = prefilter_tfidf(jd_text, profile_texts, PREFILTER_K)
     else:
         selected_indices = list(range(len(profile_texts)))

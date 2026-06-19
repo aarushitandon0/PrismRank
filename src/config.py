@@ -4,8 +4,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-MODEL_NAME: str = "gemini-2.0-flash"
+GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")  # unused, kept for compat
+GROQ_API_KEY: str = os.getenv("GROK_API_KEY", "")  # env var is named GROK_API_KEY; value is a Groq key (gsk_ prefix)
+MODEL_NAME: str = "llama-3.3-70b-versatile"
 EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
 
 FAISS_TOP_K: int = 200

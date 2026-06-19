@@ -154,6 +154,9 @@ export default function Dashboard({ rankingData, setLoading, setLoadingMsg, onRa
   const [topK, setTopK] = useState(20)
   const [error, setError] = useState('')
   const [charCount, setCharCount] = useState(0)
+  const [uploading, setUploading] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState('')
+  const fileInputRef = useRef(null)
   const interval = useRef(null)
 
   function handleJdChange(e) {
@@ -164,6 +167,32 @@ export default function Dashboard({ rankingData, setLoading, setLoadingMsg, onRa
   function loadExample() {
     setJd(EXAMPLE_JD)
     setCharCount(EXAMPLE_JD.length)
+  }
+
+  async function handleFileUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.name.endsWith('.jsonl')) {
+      setError('Only .jsonl files are accepted.')
+      return
+    }
+    setUploading(true)
+    setUploadStatus('')
+    setError('')
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/upload-candidates', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`)
+      setPath(data.path)
+      setUploadStatus(`Uploaded ${file.name} (${data.size_mb} MB)`)
+    } catch (err) {
+      setError(`Upload failed: ${err.message}`)
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
   }
 
   async function run() {
@@ -350,14 +379,40 @@ export default function Dashboard({ rankingData, setLoading, setLoadingMsg, onRa
           </div>
 
           {/* Config row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, marginBottom: 20, alignItems: 'flex-end' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, marginBottom: uploadStatus ? 6 : 20, alignItems: 'flex-end' }}>
             <div>
-              <p style={{ fontFamily: 'JetBrains Mono', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.10em', color: 'var(--ink-faint)', marginBottom: 8 }}>
-                Candidates File
-              </p>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <p style={{ fontFamily: 'JetBrains Mono', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.10em', color: 'var(--ink-faint)', margin: 0 }}>
+                  Candidates File
+                </p>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  style={{
+                    fontFamily: 'Inter', fontSize: 10, fontWeight: 600,
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                    padding: '3px 10px',
+                    background: uploading ? 'var(--bg-secondary)' : 'var(--ink)',
+                    color: 'var(--bg-primary)',
+                    border: 'none', cursor: uploading ? 'not-allowed' : 'pointer',
+                    transition: 'background 150ms ease',
+                    opacity: uploading ? 0.6 : 1,
+                  }}
+                >
+                  {uploading ? 'Uploading…' : 'Upload .jsonl'}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".jsonl"
+                  onChange={handleFileUpload}
+                  style={{ display: 'none' }}
+                />
+              </div>
               <input
                 value={path}
                 onChange={e => setPath(e.target.value)}
+                placeholder="data/candidates.jsonl"
                 style={{ ...inputStyle(true), padding: '9px 12px' }}
                 onFocus={e => e.target.style.borderColor = 'var(--gold)'}
                 onBlur={e => e.target.style.borderColor = 'var(--rule)'}
@@ -377,6 +432,18 @@ export default function Dashboard({ rankingData, setLoading, setLoadingMsg, onRa
               />
             </div>
           </div>
+
+          {uploadStatus && (
+            <div style={{
+              background: 'var(--ok-bg)',
+              borderLeft: '3px solid var(--ok-green)',
+              padding: '8px 14px', marginBottom: 16,
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <span style={{ color: 'var(--ok-green)', fontSize: 14 }}>✓</span>
+              <p style={{ fontFamily: 'Inter', fontSize: 12, color: 'var(--ok-green)', margin: 0 }}>{uploadStatus}</p>
+            </div>
+          )}
 
           {error && (
             <div style={{

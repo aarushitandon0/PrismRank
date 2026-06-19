@@ -1,9 +1,28 @@
-data/candidates.jsonl
-data/sample_candidates.json
-output/
+# Python
+venv/
+.venv/
 __pycache__/
 **/__pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Node (built output is produced by Dockerfile Stage 1, not copied from host)
+ui/node_modules/
+
+# Data and outputs (loaded at runtime via /api/upload-candidates)
+data/
+output/
+src/frontend/dist/
+
+# Secrets and dev tooling
 .env
+.env.*
+*.log
+.vscode/
+.idea/
+
+# Git
 .git/
+.gitignore

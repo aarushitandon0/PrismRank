@@ -1,9 +1,7 @@
 import json
 import re
-import google.generativeai as genai
-from src.config import GEMINI_API_KEY, MODEL_NAME
-
-genai.configure(api_key=GEMINI_API_KEY)
+from src.config import GROQ_API_KEY, MODEL_NAME
+from src.llm_client import generate_content
 
 _SYSTEM = (
     "You are a senior hiring manager at a Series A AI-native company (Redrob AI) evaluating "
@@ -82,7 +80,7 @@ def _parse_llm_batch(raw_text: str, batch: list[dict]) -> list[dict]:
 
 
 def llm_rerank(jd_parsed: dict, top_candidates: list[dict]) -> list[dict]:
-    if not GEMINI_API_KEY:
+    if not GROQ_API_KEY:
         print("[LLM Scorer] No API key — using fallback scores.")
         for c in top_candidates:
             c["llm"] = {
@@ -94,8 +92,6 @@ def llm_rerank(jd_parsed: dict, top_candidates: list[dict]) -> list[dict]:
                 "standout_signal": None,
             }
         return top_candidates
-
-    model = genai.GenerativeModel(model_name=MODEL_NAME, system_instruction=_SYSTEM)
 
     jd_context = (
         f"Role requires: Hard skills: {', '.join(jd_parsed.get('hard_skills', [])[:10])}. "
@@ -128,8 +124,8 @@ def llm_rerank(jd_parsed: dict, top_candidates: list[dict]) -> list[dict]:
         )
 
         try:
-            response = model.generate_content(prompt)
-            results = _parse_llm_batch(response.text, batch)
+            raw_text = generate_content(prompt, system_instruction=_SYSTEM, model=MODEL_NAME)
+            results = _parse_llm_batch(raw_text, batch)
         except Exception as e:
             print(f"[LLM Scorer] Batch {i//batch_size+1} failed ({e}), using fallback.")
             results = _parse_llm_batch("", batch)

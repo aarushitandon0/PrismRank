@@ -1,0 +1,58 @@
+# Redrob Hackathon v4 -- submission metadata
+# Mirrors the fields collected by the submission portal (spec section 10.2).
+# Fill in every field marked REQUIRED before submitting.
+
+team_name: "REQUIRED -- your team name"
+
+primary_contact:
+  name: "REQUIRED"
+  email: "REQUIRED"
+  phone: "REQUIRED"
+
+github_repository_url: "https://github.com/USERNAME/REPO"  # REQUIRED, must be reachable
+
+sandbox_demo_url: "REQUIRED -- e.g. https://huggingface.co/spaces/USERNAME/prismrank"
+
+ai_tools_declared:
+  - Claude
+  # - ChatGPT
+  # - Copilot
+  # - Cursor
+  # - Gemini
+  # - Other
+  # - None
+
+compute_environment_summary: "REQUIRED -- e.g. 'Windows 11, Python 3.11, 16GB RAM, CPU only'"
+
+team_members:
+  - name: "REQUIRED"
+    email: "REQUIRED"
+  # - name: "Member 2"
+  #   email: "member2@example.com"
+
+methodology_summary: >
+  REQUIRED (<=200 words). PrismRank ranks candidates against a job description
+  using a three-stage retrieval funnel (TF-IDF pre-filter, FAISS dense
+  retrieval, local re-ranking), combined with rule-based behavioral,
+  trajectory, and honeypot scorers. The compliant ranking entrypoint
+  (scripts/rank.py) makes zero network calls and uses no hosted LLM: the
+  signals normally produced by an LLM (skill alignment, experience fit,
+  culture fit) are replaced with local equivalents derived from FAISS cosine
+  similarity and rule-based heuristics over the candidate's actual career
+  history. JD-specific multipliers and an eight-signal honeypot detector are
+  applied during fusion, and honeypot-flagged candidates are hard-excluded
+  from the top 100. A separate, optional Gemini-enabled interactive dashboard
+  exists purely for demo and exploration and is not used to produce the
+  scored submission.
+
+# --- Reproduction command (must match README.md exactly) ---
+reproduction_command: >
+  python scripts/precompute.py --candidates data/candidates.jsonl --jd data/job_description.txt &&
+  python scripts/rank.py --candidates data/candidates.jsonl --jd data/job_description.txt --out submission.csv
+
+compute_constraints_verified:
+  runtime_under_5min: true
+  memory_under_16gb: true
+  cpu_only: true
+  network_off: true
+  disk_under_5gb: true

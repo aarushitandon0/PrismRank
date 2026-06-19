@@ -1,10 +1,8 @@
 import json
 import re
-import google.generativeai as genai
 from pathlib import Path
-from src.config import GEMINI_API_KEY, MODEL_NAME, OUTPUT_DIR
-
-genai.configure(api_key=GEMINI_API_KEY)
+from src.config import GROQ_API_KEY, MODEL_NAME, OUTPUT_DIR
+from src.llm_client import generate_content
 
 
 def generate_interview_pack(candidate: dict, jd_parsed: dict) -> dict:
@@ -20,7 +18,7 @@ def generate_interview_pack(candidate: dict, jd_parsed: dict) -> dict:
     culture_signals = jd_parsed.get("culture_signals", [])
     role_domain = jd_parsed.get("industry_domain", "tech")
 
-    if not GEMINI_API_KEY:
+    if not GROQ_API_KEY:
         return _fallback_pack(cid, name, top_skills, gap_alert)
 
     assessment_str = (
@@ -46,9 +44,7 @@ def generate_interview_pack(candidate: dict, jd_parsed: dict) -> dict:
     )
 
     try:
-        model = genai.GenerativeModel(model_name=MODEL_NAME)
-        resp = model.generate_content(prompt)
-        raw = resp.text.strip()
+        raw = generate_content(prompt, model=MODEL_NAME).strip()
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
         questions = json.loads(raw)

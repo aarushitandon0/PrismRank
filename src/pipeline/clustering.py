@@ -1,11 +1,9 @@
 import json
 import re
 import numpy as np
-import google.generativeai as genai
 from sklearn.cluster import KMeans
-from src.config import GEMINI_API_KEY, MODEL_NAME, NUM_CLUSTERS
-
-genai.configure(api_key=GEMINI_API_KEY)
+from src.config import GROQ_API_KEY, MODEL_NAME, NUM_CLUSTERS
+from src.llm_client import generate_content
 
 
 def cluster_personas(top_candidates: list[dict], embeddings: np.ndarray) -> dict:
@@ -52,7 +50,7 @@ def cluster_personas(top_candidates: list[dict], embeddings: np.ndarray) -> dict
 
 
 def _generate_archetype(sample_texts: str, cluster_id: int) -> tuple[str, str, str, str]:
-    if not GEMINI_API_KEY:
+    if not GROQ_API_KEY:
         return (
             f"Cluster {cluster_id + 1}",
             "A group of similar candidates.",
@@ -61,7 +59,6 @@ def _generate_archetype(sample_texts: str, cluster_id: int) -> tuple[str, str, s
         )
 
     try:
-        model = genai.GenerativeModel(model_name=MODEL_NAME)
         prompt = (
             f"Here are 3 candidate profiles from a talent cluster:\n{sample_texts}\n\n"
             f"Return a JSON object with exactly these keys:\n"
@@ -71,8 +68,7 @@ def _generate_archetype(sample_texts: str, cluster_id: int) -> tuple[str, str, s
             f"  gap (their collective gap for a typical tech role)\n"
             f"Return ONLY JSON, no markdown."
         )
-        resp = model.generate_content(prompt)
-        raw = resp.text.strip()
+        raw = generate_content(prompt, model=MODEL_NAME).strip()
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
         parsed = json.loads(raw)

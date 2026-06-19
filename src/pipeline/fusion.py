@@ -64,7 +64,7 @@ def _redrob_signal_score(features: dict) -> float:
     return min(score, 1.0)
 
 
-def _jd_specific_modifier(features: dict, raw: dict) -> tuple[float, list[str]]:
+def _jd_specific_modifier(features: dict) -> tuple[float, list[str]]:
     """
     Returns (multiplier, reasons_list).
     Multiplier < 1.0 = penalty, > 1.0 = boost, 1.0 = neutral.
@@ -220,7 +220,7 @@ def compute_final_score(candidate: dict, jd_parsed: dict) -> dict:
         weighted *= 0.95
 
     # ── JD-specific modifiers ─────────────────────────────────────────────
-    jd_multiplier, jd_reasons = _jd_specific_modifier(f, candidate.get("raw", {}))
+    jd_multiplier, jd_reasons = _jd_specific_modifier(f)
     weighted = weighted * jd_multiplier
 
     # ── Honeypot penalty ──────────────────────────────────────────────────
@@ -246,7 +246,7 @@ def compute_final_score(candidate: dict, jd_parsed: dict) -> dict:
     yoe = f.get("years_experience", 0)
     gap_str = f" Gap: {gap_alert[:60]}." if gap_alert else ""
     standout_str = f" Standout: {standout[:60]}." if standout else ""
-    hp_str = f" ⚠ Honeypot flags: {len(honeypot.get('flags', []))}." if honeypot_score > 0.3 else ""
+    hp_str = f" Honeypot flags: {len(honeypot.get('flags', []))}." if honeypot_score > 0.3 else ""
     reasoning = (
         f"{name} | {yoe}yr exp | Skills: {', '.join(top_skills)} | "
         f"Skill fit {skill_alignment:.2f}, Exp fit {experience_fit:.2f}, "

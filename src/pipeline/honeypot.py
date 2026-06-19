@@ -42,7 +42,7 @@ _AI_ML_SKILLS = {
 _SERVICES_INDUSTRY_KEYWORDS = {"it services", "consulting", "outsourcing", "bpo"}
 
 
-def detect_honeypot(features: dict, raw: dict) -> dict:
+def detect_honeypot(features: dict) -> dict:
     """
     Returns {
         "is_honeypot": bool,
@@ -62,7 +62,7 @@ def detect_honeypot(features: dict, raw: dict) -> dict:
     company = (features.get("current_company") or "").lower()
 
     # ── 1. Temporal impossibility ──────────────────────────────────────────
-    education = raw.get("education", [])
+    education = features.get("education", [])
     if education and yoe > 0:
         grad_years = [e.get("end_year") for e in education if e.get("end_year")]
         if grad_years:

@@ -104,7 +104,7 @@ def run(args):
     for c in top_candidates:
         c["behavioral_score"] = score_behavioral(c["features"])
         c["trajectory"] = score_trajectory(c["features"])
-        c["honeypot"] = detect_honeypot(c["features"], c.get("raw", {}))
+        c["honeypot"] = detect_honeypot(c["features"])
         if c["honeypot"]["is_honeypot"]:
             hp_flagged += 1
     print(f"      {hp_flagged}/{len(top_candidates)} candidates flagged as likely traps (will be down-scored).")

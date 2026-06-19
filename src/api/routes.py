@@ -1,21 +1,19 @@
 import asyncio
 import json
+import shutil
 import time
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse, JSONResponse
 
 from src.api.schemas import (
     RankRequest, RankResponse, ChatQuery, ChatResponse,
     CandidateCard, StatusResponse,
 )
-from src.config import OUTPUT_DIR, FINAL_SHORTLIST, FAISS_TOP_K, MODEL_NAME
-import google.generativeai as genai
-from src.config import GEMINI_API_KEY
-
-genai.configure(api_key=GEMINI_API_KEY)
+from src.config import OUTPUT_DIR, FINAL_SHORTLIST, FAISS_TOP_K, MODEL_NAME, GROQ_API_KEY
+from src.llm_client import generate_content
 
 router = APIRouter()
 
@@ -92,6 +90,19 @@ async def _run_in_thread(fn, *args, **kwargs):
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+@router.post("/api/upload-candidates")
+async def upload_candidates(file: UploadFile = File(...)):
+    from src.config import DATA_DIR
+    DATA_DIR.mkdir(exist_ok=True)
+    if not file.filename.endswith(".jsonl"):
+        raise HTTPException(status_code=400, detail="Only .jsonl files are accepted.")
+    dest = DATA_DIR / "candidates.jsonl"
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    size_mb = round(dest.stat().st_size / 1_048_576, 1)
+    return {"ok": True, "path": "data/candidates.jsonl", "size_mb": size_mb}
+
 
 @router.post("/api/reset-lock")
 async def reset_lock():
@@ -181,7 +192,7 @@ async def rank_candidates(req: RankRequest):
             for c in candidates:
                 c["behavioral_score"] = score_behavioral(c["features"])
                 c["trajectory"] = score_trajectory(c["features"])
-                c["honeypot"] = detect_honeypot(c["features"], c.get("raw", {}))
+                c["honeypot"] = detect_honeypot(c["features"])
                 if c["honeypot"]["is_honeypot"]:
                     hp_count += 1
             print(f"[Routes] Honeypot detector: {hp_count}/{len(candidates)} flagged as likely traps.")
@@ -260,8 +271,11 @@ async def rank_candidates(req: RankRequest):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[Routes] Pipeline error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[Routes] Pipeline error: {type(e).__name__}: {e}")
+        print(tb)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}" or type(e).__name__)
     finally:
         release_rank_lock()
 
@@ -280,13 +294,12 @@ async def chat(req: ChatQuery):
             filter_applied="No ranking has been run yet. Please run /api/rank first.",
         )
 
-    # Use Gemini to parse the query into filter criteria
+    # Use Groq to parse the query into filter criteria
     filter_desc = req.query
     filtered = ranked_df.copy()
 
-    if GEMINI_API_KEY:
+    if GROQ_API_KEY:
         try:
-            model = genai.GenerativeModel(model_name=MODEL_NAME)
             parse_prompt = (
                 f"Parse this recruiter query into filter criteria JSON:\n"
                 f"Query: \"{req.query}\"\n\n"
@@ -302,8 +315,7 @@ async def chat(req: ChatQuery):
                 f"  trajectory_label: string\n"
                 f"Return ONLY JSON, no markdown."
             )
-            resp = model.generate_content(parse_prompt)
-            raw = resp.text.strip()
+            raw = generate_content(parse_prompt, model=MODEL_NAME).strip()
             raw = __import__("re").sub(r"^```(?:json)?\s*", "", raw)
             raw = __import__("re").sub(r"\s*```$", "", raw)
             criteria = json.loads(raw)
