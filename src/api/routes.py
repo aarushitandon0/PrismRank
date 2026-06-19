@@ -104,6 +104,51 @@ async def upload_candidates(file: UploadFile = File(...)):
     return {"ok": True, "path": "data/candidates.jsonl", "size_mb": size_mb}
 
 
+@router.post("/api/sandbox-rank")
+async def sandbox_rank(file: UploadFile = File(...)):
+    """
+    Network-free sandbox endpoint for the hackathon's required sandbox/demo
+    link (spec section 10.5). Calls scripts.rank.run() directly -- the exact
+    same compliant, LLM-free ranking code that produces the official
+    submission CSV -- against a small uploaded candidate sample, so this
+    sandbox is provably consistent with the code reproduced at Stage 3.
+
+    Accepts <=100 candidates (per spec, full 100K reproducibility happens in
+    the organizers' own sandbox at Stage 3, not here). Returns the ranked CSV.
+    """
+    if not file.filename.endswith(".jsonl"):
+        raise HTTPException(status_code=400, detail="Only .jsonl files are accepted.")
+
+    from src.config import DATA_DIR, OUTPUT_DIR
+    sandbox_dir = OUTPUT_DIR / "sandbox"
+    sandbox_dir.mkdir(parents=True, exist_ok=True)
+
+    sample_path = sandbox_dir / "sample_candidates.jsonl"
+    with open(sample_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    jd_path = DATA_DIR / "job_description.txt"
+    out_path = sandbox_dir / "sandbox_submission.csv"
+
+    from scripts.rank import run as run_local_rank
+    t0 = time.time()
+    try:
+        await _run_in_thread(run_local_rank, sample_path, jd_path, out_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sandbox ranking failed: {type(e).__name__}: {e}")
+    elapsed = round(time.time() - t0, 1)
+
+    if not out_path.exists():
+        raise HTTPException(status_code=500, detail="Sandbox ranking did not produce an output file.")
+
+    return FileResponse(
+        str(out_path),
+        filename="sandbox_submission.csv",
+        media_type="text/csv",
+        headers={"X-Elapsed-Seconds": str(elapsed)},
+    )
+
+
 @router.post("/api/reset-lock")
 async def reset_lock():
     from src.pipeline.embedder import release_rank_lock

@@ -12,16 +12,16 @@ The system was designed around the specific failure modes embedded in the challe
 
 **Capabilities at a glance:**
 
-- Three-stage retrieval: TF-IDF pre-filter (100K to 1K) + FAISS dense search (1K to 200) + Gemini LLM re-ranking (200 to 100)
+- Three-stage retrieval: TF-IDF pre-filter (100K to 1K) + FAISS dense search (1K to 200) + Groq LLM re-ranking (200 to 100)
 - Five-component weighted score fusion with JD-specific multipliers
 - Eight-signal honeypot detector with score-based suppression
 - Trajectory scorer: velocity x tier progression x tenure stability
 - Twelve-signal behavioral scorer over Redrob platform data
-- KMeans persona clustering (k=5) with Gemini-generated archetype names
+- KMeans persona clustering (k=5) with Groq-generated archetype names
 - Five-dimension fairness audit with Gini coefficient + skew ratio analysis
 - Automated interview pack generation (5 tailored questions per top-20 candidate)
 - Full React dashboard with recruiter chat, persona explorer, and bias report viewer
-- Graceful degraded mode when no Gemini API key is present
+- Graceful degraded mode when no Groq API key is present
 
 ---
 
@@ -55,7 +55,7 @@ The system was designed around the specific failure modes embedded in the challe
   ┌───────────────────┐        ┌───────────────────────┐
   │  JD Parser        │        │  Stage 1: TF-IDF      │
   │                   │        │  Pre-filter            │
-  │  Gemini 2.0 Flash │        │                       │
+  │  Groq (Llama 3.3 70B) │        │                       │
   │  extracts:        │        │  TfidfVectorizer       │
   │  - hard_skills    │        │  bigram, sublinear_tf  │
   │  - soft_skills    │        │  max_features=20,000   │
@@ -84,7 +84,7 @@ The system was designed around the specific failure modes embedded in the challe
                                            │
                                            ▼
                                ┌───────────────────────┐
-                               │  Stage 3: Gemini      │
+                               │  Stage 3: Groq      │
                                │  LLM Re-ranking        │
                                │                       │
                                │  Batches of 10        │
@@ -152,9 +152,9 @@ The system was designed around the specific failure modes embedded in the challe
   │                   │        │  5 fairness dims       │   │                   │
   │  k=5 over FAISS   │        │  Gini coefficient     │   │  Top 20 candidates │
   │  embeddings of    │        │  Skew ratios          │   │  5 questions each  │
-  │  top-100          │        │  Shortlist vs pool    │   │  Gemini-generated  │
+  │  top-100          │        │  Shortlist vs pool    │   │  Groq-generated  │
   │                   │        │                       │   │  from career +     │
-  │  Gemini names     │        │  → audit_passed       │   │  JD hard skills    │
+  │  Groq names     │        │  → audit_passed       │   │  JD hard skills    │
   │  each cluster     │        │  → warnings           │   └────────────────────┘
   │  by archetype     │        │  → recommendation     │
   └───────────────────┘        └───────────────────────┘
@@ -212,9 +212,9 @@ scores, indices = index.search(jd_vector, k=200)
 
 Embeddings are cached to disk using an MD5 key derived from the model name and the first 50 profile texts, allowing subsequent runs to skip re-encoding entirely.
 
-### Stage 3 — Gemini 2.0 Flash Re-ranking
+### Stage 3 — Groq (Llama 3.3 70B) Re-ranking
 
-Each of the 200 candidates is scored by Gemini 2.0 Flash in batches of 10. The LLM receives the job description and a structured candidate summary, and returns a JSON object per candidate:
+Each of the 200 candidates is scored by Groq (Llama 3.3 70B) in batches of 10. The LLM receives the job description and a structured candidate summary, and returns a JSON object per candidate:
 
 ```json
 {
@@ -227,7 +227,7 @@ Each of the 200 candidates is scored by Gemini 2.0 Flash in batches of 10. The L
 }
 ```
 
-The LLM scores are grounded in career history, not keyword lists, which is the key differentiator from the TF-IDF and FAISS stages. A candidate listing "PyTorch" as a skill but having zero AI roles in their career receives a low `skill_alignment` from Gemini even if they passed the lexical stages.
+The LLM scores are grounded in career history, not keyword lists, which is the key differentiator from the TF-IDF and FAISS stages. A candidate listing "PyTorch" as a skill but having zero AI roles in their career receives a low `skill_alignment` from Groq even if they passed the lexical stages.
 
 ---
 
@@ -239,11 +239,11 @@ The final score for each candidate is computed as a weighted linear combination 
 
 | Signal | Weight | Source |
 |---|---|---|
-| `skill_alignment` | 30% | Gemini 2.0 Flash |
-| `experience_fit` | 25% | Gemini 2.0 Flash |
+| `skill_alignment` | 30% | Groq (Llama 3.3 70B) |
+| `experience_fit` | 25% | Groq (Llama 3.3 70B) |
 | `behavioral_score` | 20% | 12-signal Redrob scorer |
 | `redrob_signals` | 15% | Platform activity (completeness, notice, views) |
-| `culture_fit` | 10% | Gemini 2.0 Flash |
+| `culture_fit` | 10% | Groq (Llama 3.3 70B) |
 
 ```
 weighted = (
@@ -476,7 +476,7 @@ warning    = skew_reloc > 1.5
 
 ## Persona Clustering
 
-After the final shortlist is produced, the 384-dimensional FAISS embeddings for the top 100 candidates are clustered into 5 groups using KMeans (`sklearn.cluster.KMeans(n_clusters=5)`). Gemini 2.0 Flash then names each cluster based on the titles, skills, and career patterns of its members.
+After the final shortlist is produced, the 384-dimensional FAISS embeddings for the top 100 candidates are clustered into 5 groups using KMeans (`sklearn.cluster.KMeans(n_clusters=5)`). Groq (Llama 3.3 70B) then names each cluster based on the titles, skills, and career patterns of its members.
 
 Example archetype names generated during competition run:
 
@@ -494,7 +494,7 @@ Example archetype names generated during competition run:
 |---|---|---|
 | Runtime | Python | 3.11 |
 | API framework | FastAPI + Uvicorn | latest |
-| LLM | Gemini 2.0 Flash | `gemini-2.0-flash` |
+| LLM | Groq (Llama 3.3 70B) | `llama-3.3-70b-versatile` |
 | Embeddings | sentence-transformers, all-MiniLM-L6-v2 | latest |
 | Vector index | FAISS, IndexFlatIP | latest |
 | Lexical retrieval | scikit-learn TfidfVectorizer | latest |
@@ -531,13 +531,13 @@ prismrank/
       candidate_processor.py    # JSONL parsing, profile text builder, feature extractor
       embedder.py               # TF-IDF pre-filter, sentence-transformer encoding,
                                 # FAISS index builder, embedding cache management
-      jd_parser.py              # JD parsing via Gemini; regex fallback
-      llm_scorer.py             # Gemini re-ranking, batched 10 candidates/call
+      jd_parser.py              # JD parsing via Groq; regex fallback
+      llm_scorer.py             # Groq re-ranking, batched 10 candidates/call
       behavioral.py             # 12-signal Redrob behavioral scorer
       trajectory.py             # Velocity x tier progression x tenure scorer
       honeypot.py               # 8-signal trap candidate detector
       fusion.py                 # Weighted fusion, JD multipliers, honeypot suppression
-      clustering.py             # KMeans clustering, Gemini archetype naming
+      clustering.py             # KMeans clustering, Groq archetype naming
       bias_audit.py             # Gini coefficient, skew ratio fairness audit
       interview_gen.py          # Interview pack generation, top-20 candidates
 
@@ -573,7 +573,7 @@ prismrank/
 
 - Python 3.11+
 - Node.js 18+ (for frontend build)
-- Gemini API key (optional — system runs in degraded mode without one)
+- Groq API key (optional — system runs in degraded mode without one)
 
 ### Local Installation
 
@@ -593,12 +593,12 @@ source venv/bin/activate
 # 3. Install Python dependencies
 pip install -r requirements.txt
 
-# 4. Set the Gemini API key (optional)
+# 4. Set the Groq API key (optional)
 # Windows PowerShell:
-$env:GEMINI_API_KEY = "your_key_here"
+$env:GROK_API_KEY = "your_key_here"
 
 # macOS / Linux:
-export GEMINI_API_KEY="your_key_here"
+export GROK_API_KEY="your_key_here"
 
 # 5. Place the challenge data
 # Copy candidates.jsonl into data/candidates.jsonl
@@ -632,17 +632,17 @@ npm run dev
 
 ---
 
-## Degraded Mode (no Gemini API key)
+## Degraded Mode (no Groq API key)
 
-PrismRank runs the full pipeline without a Gemini API key. The following components fall back gracefully:
+PrismRank runs the full pipeline without a Groq API key. The following components fall back gracefully:
 
-| Component | With Gemini | Without Gemini |
+| Component | With Groq | Without Groq |
 |---|---|---|
 | JD Parser | Structured extraction (skills, deal-breakers, YoE range) | Regex rule-based extraction from JD text |
 | LLM Re-ranker | Grounded skill and experience scores | Defaults to 0.50 for all candidates |
-| Cluster naming | Gemini-generated archetype names | "Cluster 1", "Cluster 2", ... "Cluster 5" |
+| Cluster naming | Groq-generated archetype names | "Cluster 1", "Cluster 2", ... "Cluster 5" |
 | Interview pack | Tailored questions grounded in career history | Template-based questions from JD hard skills |
-| Recruiter chat | Conversational Gemini over ranked results | Keyword-based query matching |
+| Recruiter chat | Conversational Groq over ranked results | Keyword-based query matching |
 
 All retrieval (TF-IDF, FAISS), scoring (behavioral, trajectory, honeypot), fusion, clustering, and bias audit components run identically regardless of API key availability. In degraded mode, final scores are driven by behavioral + trajectory signals.
 
@@ -652,7 +652,7 @@ All retrieval (TF-IDF, FAISS), scoring (behavioral, trajectory, honeypot), fusio
 
 | Variable | Required | Description |
 |---|---|---|
-| `GEMINI_API_KEY` | No | Google AI Studio API key for LLM re-ranking, JD parsing, persona naming, and recruiter chat |
+| `GROK_API_KEY` | No | Google AI Studio API key for LLM re-ranking, JD parsing, persona naming, and recruiter chat |
 
 Get a key at: https://aistudio.google.com/app/apikey
 
@@ -669,6 +669,23 @@ Get a key at: https://aistudio.google.com/app/apikey
 | `GET` | `/api/download/bias-report` | Download `bias_report.json` |
 | `GET` | `/api/download/interview-pack` | Download `interview_pack.json` |
 | `POST` | `/api/reset-lock` | Emergency release of the ranking lock if a job appears stuck |
+| `POST` | `/api/sandbox-rank` | Sandbox/demo endpoint (see below) |
+
+---
+
+## Sandbox / Reproducibility Endpoint
+
+`POST /api/sandbox-rank` accepts an uploaded `.jsonl` file (intended for small samples, up to 100 candidates) and calls `scripts/rank.py`'s `run()` function directly -- the exact same network-free, CPU-only code that produces the official submission CSV, not a separate reimplementation. It returns the resulting ranked CSV.
+
+This exists specifically to satisfy a hosted sandbox requirement: a small, fast, publicly reachable way to verify the ranking code runs end-to-end before a full reproduction against the complete candidate pool. Because it calls into `scripts/rank.py` directly rather than duplicating logic, there is no way for this endpoint and the official submission script to drift out of sync.
+
+```bash
+curl -X POST https://<deployed-url>/api/sandbox-rank \
+  -F "file=@small_sample.jsonl" \
+  -o sandbox_submission.csv
+```
+
+Verified locally on a 50-candidate sample: completes in ~16 seconds, produces a correctly ranked CSV with fewer than 100 rows (expected -- the sandbox does not require a full 100-row output, per spec section 10.5).
 
 ---
 

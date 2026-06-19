@@ -32,12 +32,17 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 
 # Copy source
 COPY src/ ./src/
+COPY scripts/ ./scripts/
 
 # Copy built frontend from stage 1
 COPY --from=frontend /app/src/frontend/dist/ ./src/frontend/dist/
 
-# Writable runtime directories (data + output need write access)
+# Writable runtime directories (data + output need write access).
+# job_description.txt is baked in via .dockerignore's negation rule; it's the
+# small, fixed hackathon JD and is the default read by scripts/rank.py and
+# /api/sandbox-rank. candidates.jsonl is uploaded at runtime, never baked in.
 RUN mkdir -p /app/data /app/output
+COPY data/job_description.txt ./data/job_description.txt
 
 # HF Spaces Docker requires port 7860.
 # PORT env var is respected if set (Railway / Render inject it automatically).

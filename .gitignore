@@ -50,6 +50,7 @@ output/submission.csv
 output/bias_report.json
 output/interview_pack.json
 output/test_submission.csv
+/submission.csv
 
 # ── Frontend build ─────────────────────────────────────────────
 src/frontend/dist/

@@ -11,8 +11,11 @@ __pycache__/
 # Node (built output is produced by Dockerfile Stage 1, not copied from host)
 ui/node_modules/
 
-# Data and outputs (loaded at runtime via /api/upload-candidates)
-data/
+# Data and outputs (candidates.jsonl is loaded at runtime via /api/upload-candidates;
+# job_description.txt is the small, fixed hackathon JD and IS needed in the image
+# as the default for scripts/rank.py and /api/sandbox-rank)
+data/*
+!data/job_description.txt
 output/
 src/frontend/dist/
 
