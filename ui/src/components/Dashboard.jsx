@@ -3,7 +3,7 @@ import DashboardCard from './DashboardCard'
 
 const LOADING_MSGS = [
   'Parsing resumes…', 'Building semantic index…', 'Running FAISS vector search…',
-  'LLM scoring top candidates…', 'Fusing behavioral signals…', 'Clustering talent personas…',
+  'Scoring skill alignment and experience fit…', 'Fusing behavioral signals…', 'Clustering talent personas…',
   'Running bias audit…', 'Generating interview packs…', 'Finalizing rankings…',
 ]
 
@@ -26,7 +26,7 @@ Things you absolutely need:
 const PIPELINE_STEPS = [
   { n: '1', label: 'TF-IDF Pre-filter',  sub: 'Narrows 100K→1K' },
   { n: '2', label: 'FAISS Vector Search', sub: 'Semantic retrieval' },
-  { n: '3', label: 'Gemini Re-ranking',   sub: 'LLM scores top fits' },
+  { n: '3', label: 'Local Scoring',   sub: 'Behavioral, trajectory, honeypot signals' },
   { n: '4', label: 'Bias Audit',          sub: 'Fairness check' },
 ]
 
@@ -288,7 +288,7 @@ export default function Dashboard({ rankingData, setLoading, setLoadingMsg, onRa
             fontFamily: 'Inter', fontWeight: 400, fontSize: 16,
             color: 'var(--ink-muted)', lineHeight: 1.7, maxWidth: 400, marginBottom: 44,
           }}>
-            Paste any job description. PrismRank searches your entire candidate pool with semantic AI, re-ranks with Gemini, and surfaces the best matches with a full bias audit.
+            Paste any job description. PrismRank searches your entire candidate pool with semantic retrieval, scores every candidate with local behavioral, trajectory, and honeypot-detection signals, and surfaces the best matches with a full bias audit.
           </p>
 
           {/* Pipeline timeline */}

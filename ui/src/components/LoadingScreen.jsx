@@ -4,7 +4,7 @@ const MSGS = [
   'Parsing resumes…',
   'Building semantic index…',
   'Running FAISS vector search…',
-  'Scoring candidates with Gemini…',
+  'Scoring candidates with local signals…',
   'Fusing behavioral signals…',
   'Clustering talent personas…',
   'Running bias audit…',
