@@ -48,7 +48,7 @@ from src.pipeline.behavioral import score_behavioral
 from src.pipeline.trajectory import score_trajectory
 from src.pipeline.honeypot import detect_honeypot
 from src.pipeline.jd_local import parse_jd_local
-from src.pipeline.local_scorer import attach_local_llm_proxy, generate_reasoning
+from src.pipeline.local_scorer import attach_local_llm_proxy, generate_reasoning, attach_dominant_signal_percentiles
 from src.pipeline.fusion import compute_final_score, rank_all
 from src.pipeline.precompute_cache import get_or_build_candidates, get_or_build_tfidf
 
@@ -117,6 +117,12 @@ def run(candidates_path: Path, jd_path: Path, out_path: Path) -> int:
     top100_df = ranked_df.head(FINAL_SHORTLIST).copy()
 
     score_lookup = {c["candidate_id"]: c for c in clean}
+    top100_candidates = [score_lookup[cid] for cid in top100_df["candidate_id"]]
+    # Computed over exactly the 100 candidates in the final CSV, not the full
+    # 200-candidate pool, so "dominant signal" reflects what's actually
+    # distinctive within the population a Stage 4 reviewer samples from.
+    attach_dominant_signal_percentiles(top100_candidates)
+
     reasonings = []
     for _, row in top100_df.iterrows():
         c = score_lookup[row["candidate_id"]]
