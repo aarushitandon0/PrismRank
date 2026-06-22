@@ -49,22 +49,10 @@ compute_environment_summary: "Windows 11 Home Single Language, 12-core CPU, 16GB
 # AI tools declaration
 # ============================================================================
 ai_tools_used:
-  - "Claude"
+  - "Claude" "Copilot"
 
 ai_usage_summary: |
-  Used Claude (Anthropic, via Claude Code) extensively throughout development:
-  architecture design for the three-stage retrieval pipeline, implementation of
-  the scoring modules (behavioral, trajectory, honeypot detection, JD-specific
-  fusion), debugging (Windows console encoding issues, runtime/memory
-  optimization to fit the 5-minute compute budget), building the network-free
-  compliant ranking script (scripts/rank.py), Groq API integration for the
-  optional interactive dashboard, deployment to Hugging Face Spaces, and
-  documentation. Critically: the official ranking script that produces the
-  submission CSV (scripts/rank.py) makes zero LLM API calls -- verified by
-  inspecting its import graph for any hosted LLM SDK. Candidate data is only
-  ever sent to a hosted LLM (Groq) in the separate, optional interactive
-  dashboard used for demos and exploration, never in the script that produces
-  the scored submission.
+  Used Claude for code debugging and copilot for autocode completion
 
 # ============================================================================
 # Approach summary
