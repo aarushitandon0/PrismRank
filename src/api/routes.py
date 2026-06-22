@@ -12,8 +12,7 @@ from src.api.schemas import (
     RankRequest, RankResponse, ChatQuery, ChatResponse,
     CandidateCard, StatusResponse,
 )
-from src.config import OUTPUT_DIR, FINAL_SHORTLIST, FAISS_TOP_K, MODEL_NAME, GROQ_API_KEY
-from src.llm_client import generate_content
+from src.config import OUTPUT_DIR, FINAL_SHORTLIST, FAISS_TOP_K
 
 router = APIRouter()
 
@@ -109,9 +108,9 @@ async def sandbox_rank(file: UploadFile = File(...)):
     """
     Network-free sandbox endpoint for the hackathon's required sandbox/demo
     link (spec section 10.5). Calls scripts.rank.run() directly -- the exact
-    same compliant, LLM-free ranking code that produces the official
-    submission CSV -- against a small uploaded candidate sample, so this
-    sandbox is provably consistent with the code reproduced at Stage 3.
+    same compliant ranking code that produces the official submission CSV --
+    against a small uploaded candidate sample, so this sandbox is provably
+    consistent with the code reproduced at Stage 3.
 
     Accepts <=100 candidates (per spec, full 100K reproducibility happens in
     the organizers' own sandbox at Stage 3, not here). Returns the ranked CSV.
@@ -169,7 +168,7 @@ async def status(request=None):
         loaded = getattr(m.app.state, "candidates_loaded", 0)
     except Exception:
         pass
-    return StatusResponse(status="ready", model=MODEL_NAME, candidates_loaded=loaded)
+    return StatusResponse(status="ready", model="local-rule-based", candidates_loaded=loaded)
 
 
 @router.post("/api/rank", response_model=RankResponse)
@@ -177,11 +176,11 @@ async def rank_candidates(req: RankRequest):
     from src.api.main import app
     from src.pipeline.candidate_processor import process_all_candidates
     from src.pipeline.embedder import build_index, search_top_k
-    from src.pipeline.jd_parser import parse_jd
+    from src.pipeline.jd_local import parse_jd_local as parse_jd
     from src.pipeline.behavioral import score_behavioral
     from src.pipeline.trajectory import score_trajectory
     from src.pipeline.honeypot import detect_honeypot
-    from src.pipeline.llm_scorer import llm_rerank
+    from src.pipeline.local_scorer import attach_local_scores, attach_dominant_signal_percentiles, generate_reasoning
     from src.pipeline.fusion import compute_final_score, rank_all
     from src.pipeline.clustering import cluster_personas
     from src.pipeline.bias_audit import run_bias_audit
@@ -229,6 +228,8 @@ async def rank_candidates(req: RankRequest):
 
         # Map local FAISS indices back to global candidate list
         top_candidates = [all_profiles[original_indices[int(i)]] for i in local_indices]
+        for c, score in zip(top_candidates, scores):
+            c["_cosine_score"] = float(max(0.0, min(1.0, score)))
 
         # 5. Behavioral + trajectory scoring for top-200
         print("[Routes] Scoring behavioral + trajectory...")
@@ -245,9 +246,14 @@ async def rank_candidates(req: RankRequest):
 
         top_candidates = await _run_in_thread(score_all, top_candidates)
 
-        # 6. LLM re-rank
-        print("[Routes] LLM re-ranking...")
-        top_candidates = await _run_in_thread(llm_rerank, jd_parsed, top_candidates)
+        # 6. Local scoring (skill alignment, experience fit, culture fit)
+        print("[Routes] Local scoring...")
+        def local_score_all(candidates):
+            for c in candidates:
+                attach_local_scores(c, jd_parsed, c["_cosine_score"])
+            return candidates
+
+        top_candidates = await _run_in_thread(local_score_all, top_candidates)
 
         # 7. Fusion scoring
         print("[Routes] Fusion scoring...")
@@ -339,35 +345,10 @@ async def chat(req: ChatQuery):
             filter_applied="No ranking has been run yet. Please run /api/rank first.",
         )
 
-    # Use Groq to parse the query into filter criteria
+    # Parse the query into filter criteria with a local keyword parser.
     filter_desc = req.query
     filtered = ranked_df.copy()
-
-    if GROQ_API_KEY:
-        try:
-            parse_prompt = (
-                f"Parse this recruiter query into filter criteria JSON:\n"
-                f"Query: \"{req.query}\"\n\n"
-                f"Return JSON with optional keys:\n"
-                f"  skill_keywords: list of skill names to match\n"
-                f"  min_score: float 0-1\n"
-                f"  min_years: int\n"
-                f"  max_years: int\n"
-                f"  seniority: string (junior/mid/senior)\n"
-                f"  work_mode: string (remote/hybrid/onsite/flexible)\n"
-                f"  open_to_work: bool\n"
-                f"  tier: string (A/B/C)\n"
-                f"  trajectory_label: string\n"
-                f"Return ONLY JSON, no markdown."
-            )
-            raw = generate_content(parse_prompt, model=MODEL_NAME).strip()
-            raw = __import__("re").sub(r"^```(?:json)?\s*", "", raw)
-            raw = __import__("re").sub(r"\s*```$", "", raw)
-            criteria = json.loads(raw)
-        except Exception:
-            criteria = {}
-    else:
-        criteria = _rule_based_parse(req.query)
+    criteria = _rule_based_parse(req.query)
 
     # Apply filters
     filters_used = []

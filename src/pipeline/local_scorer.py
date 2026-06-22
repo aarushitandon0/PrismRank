@@ -1,17 +1,17 @@
 """
-Fully local, network-free substitutes for the Gemini-derived skill_alignment,
-experience_fit, and culture_fit signals consumed by fusion.compute_final_score.
+Fully local, network-free scorers for skill_alignment, experience_fit, and
+culture_fit, consumed by fusion.compute_final_score.
 
-This module exists so scripts/rank.py (the compliant ranking entrypoint) can
-populate the exact same candidate["llm"] shape the interactive, Gemini-enabled
-pipeline produces, allowing fusion.compute_final_score, the JD-specific
-multipliers, and honeypot suppression to run completely unchanged. No function
-in this file makes a network call or imports an LLM SDK.
+skill_alignment blends FAISS cosine similarity with an explicit hard-skill
+match ratio. experience_fit blends total years of experience with years
+spent specifically in JD-relevant roles. No function in this file makes a
+network call or depends on any hosted API.
 
 Also provides generate_reasoning(), a deterministic, fact-grounded reasoning
-generator for the submission CSV's "reasoning" column. Every sentence is built
-from real candidate fields and real JD-derived multiplier reasons, so claims
-are traceable to the input data and never hallucinated.
+generator for the submission CSV's "reasoning" column. Every sentence is
+assembled from real candidate fields, with sentence structure chosen by each
+candidate's population-relative strongest signal, so claims are traceable to
+the input data and never hallucinated.
 """
 
 
@@ -105,9 +105,9 @@ def local_culture_fit(features: dict, jd_parsed: dict) -> float:
     return max(0.0, min(1.0, score))
 
 
-def attach_local_llm_proxy(candidate: dict, jd_parsed: dict, cosine_score: float) -> None:
-    """Populates candidate["llm"] using only local signals. Drop-in replacement
-    for src.pipeline.llm_scorer.llm_rerank's per-candidate output shape."""
+def attach_local_scores(candidate: dict, jd_parsed: dict, cosine_score: float) -> None:
+    """Populates candidate["scores"] with skill_alignment, experience_fit, and
+    culture_fit using only local signals, for fusion.compute_final_score."""
     f = candidate.get("features", {})
     yoe = float(f.get("years_experience", 0) or 0)
 
@@ -128,7 +128,7 @@ def attach_local_llm_proxy(candidate: dict, jd_parsed: dict, cosine_score: float
     if matched_count >= 5:
         standout_signal = "Strong overlap with the JD's core technical requirements."
 
-    candidate["llm"] = {
+    candidate["scores"] = {
         "skill_alignment": round(skill_alignment, 4),
         "experience_fit": round(experience_fit, 4),
         "culture_fit": round(culture_fit, 4),

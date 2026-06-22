@@ -172,16 +172,16 @@ def _jd_specific_modifier(features: dict) -> tuple[float, list[str]]:
 
 def compute_final_score(candidate: dict, jd_parsed: dict) -> dict:
     f = candidate.get("features", {})
-    llm = candidate.get("llm", {})
+    scores = candidate.get("scores", {})
     traj = candidate.get("trajectory", {})
     behavioral = candidate.get("behavioral_score", 0.5)
     honeypot = candidate.get("honeypot", {})
 
-    skill_alignment = float(llm.get("skill_alignment", 0.5))
-    experience_fit = float(llm.get("experience_fit", 0.5))
-    culture_fit = float(llm.get("culture_fit", 0.5))
-    gap_alert = llm.get("gap_alert") or ""
-    standout = llm.get("standout_signal") or ""
+    skill_alignment = float(scores.get("skill_alignment", 0.5))
+    experience_fit = float(scores.get("experience_fit", 0.5))
+    culture_fit = float(scores.get("culture_fit", 0.5))
+    gap_alert = scores.get("gap_alert") or ""
+    standout = scores.get("standout_signal") or ""
 
     redrob_score = _redrob_signal_score(f)
     trajectory_percentile = traj.get("trajectory_percentile", 50) if traj else 50
@@ -273,7 +273,7 @@ def compute_final_score(candidate: dict, jd_parsed: dict) -> dict:
         },
         "trajectory_label": trajectory_label,
         "trajectory_percentile": trajectory_percentile,
-        "one_line_summary": llm.get("one_line_summary", ""),
+        "one_line_summary": scores.get("one_line_summary", ""),
         "gap_alert": gap_alert or None,
         "standout_signal": standout or None,
     }

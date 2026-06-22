@@ -1,64 +1,18 @@
 import json
-import re
 from pathlib import Path
-from src.config import GROQ_API_KEY, MODEL_NAME, OUTPUT_DIR
-from src.llm_client import generate_content
+from src.config import OUTPUT_DIR
 
 
 def generate_interview_pack(candidate: dict, jd_parsed: dict) -> dict:
+    """Deterministic, template-based interview pack. No network call, no
+    generative model -- questions are filled in from the candidate's actual
+    top skills and gap alert."""
     f = candidate.get("features", {})
     name = f.get("name", "Candidate")
     cid = f.get("candidate_id", "")
-    title = f.get("current_title", "N/A")
     top_skills = f.get("top_skills", [])
-    assessment = f.get("skill_assessment_scores", {})
     gap_alert = candidate.get("gap_alert") or "none identified"
-    standout = candidate.get("standout_signal") or "none identified"
-    traj_label = candidate.get("trajectory_label", "Unknown")
-    culture_signals = jd_parsed.get("culture_signals", [])
-    role_domain = jd_parsed.get("industry_domain", "tech")
-
-    if not GROQ_API_KEY:
-        return _fallback_pack(cid, name, top_skills, gap_alert)
-
-    assessment_str = (
-        ", ".join(f"{k}: {v:.0f}/100" for k, v in assessment.items())
-        if assessment else "no assessments taken"
-    )
-
-    prompt = (
-        f"Generate exactly 5 interview questions for {name}, a {title} candidate.\n"
-        f"Top skills: {', '.join(top_skills)}\n"
-        f"Verified assessment scores: {assessment_str}\n"
-        f"Gap identified: {gap_alert}\n"
-        f"Standout signal: {standout}\n"
-        f"Career trajectory: {traj_label}\n"
-        f"Role domain: {role_domain}, culture: {', '.join(culture_signals)}\n\n"
-        f"Return a JSON array of exactly 5 objects, each with:\n"
-        f"  type: one of 'behavioral' | 'technical' | 'culture'\n"
-        f"  question: the interview question (specific to this person)\n"
-        f"  what_to_listen_for: what a strong answer looks like (1-2 sentences)\n\n"
-        f"Distribution: 2 behavioral (STAR format, targeting gap area), "
-        f"2 technical (on strongest verified skills), 1 culture/values question.\n"
-        f"Return ONLY JSON array, no markdown."
-    )
-
-    try:
-        raw = generate_content(prompt, model=MODEL_NAME).strip()
-        raw = re.sub(r"^```(?:json)?\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
-        questions = json.loads(raw)
-        if not isinstance(questions, list):
-            raise ValueError("Not a list")
-    except Exception as e:
-        print(f"[Interview Gen] Failed for {name} ({e}), using fallback.")
-        return _fallback_pack(cid, name, top_skills, gap_alert)
-
-    return {
-        "candidate_id": cid,
-        "candidate_name": name,
-        "questions": questions[:5],
-    }
+    return _fallback_pack(cid, name, top_skills, gap_alert)
 
 
 def _fallback_pack(cid: str, name: str, skills: list, gap: str) -> dict:
@@ -98,30 +52,10 @@ def _fallback_pack(cid: str, name: str, skills: list, gap: str) -> dict:
 def generate_all_packs(shortlist: list[dict], jd_parsed: dict) -> list[dict]:
     packs = []
     top_20 = shortlist[:20]
-    quota_exhausted = False
     for i, candidate in enumerate(top_20):
         name = candidate.get("features", {}).get("name", f"Candidate {i+1}")
         print(f"[Interview Gen] Generating pack for {name} ({i+1}/{len(top_20)})...")
-        if quota_exhausted:
-            packs.append(_fallback_pack(
-                candidate.get("features", {}).get("candidate_id", ""),
-                name,
-                candidate.get("features", {}).get("top_skills", []),
-                candidate.get("gap_alert") or "",
-            ))
-            continue
-        try:
-            pack = generate_interview_pack(candidate, jd_parsed)
-        except Exception as e:
-            if "429" in str(e) or "quota" in str(e).lower():
-                print(f"[Interview Gen] Quota exhausted — switching all remaining to fallback.")
-                quota_exhausted = True
-            pack = _fallback_pack(
-                candidate.get("features", {}).get("candidate_id", ""),
-                name,
-                candidate.get("features", {}).get("top_skills", []),
-                candidate.get("gap_alert") or "",
-            )
+        pack = generate_interview_pack(candidate, jd_parsed)
         packs.append(pack)
 
     out_path = OUTPUT_DIR / "interview_pack.json"

@@ -1,9 +1,6 @@
-import json
-import re
 import numpy as np
 from sklearn.cluster import KMeans
-from src.config import GROQ_API_KEY, MODEL_NAME, NUM_CLUSTERS
-from src.llm_client import generate_content
+from src.config import NUM_CLUSTERS
 
 
 def cluster_personas(top_candidates: list[dict], embeddings: np.ndarray) -> dict:
@@ -26,16 +23,8 @@ def cluster_personas(top_candidates: list[dict], embeddings: np.ndarray) -> dict
         candidate_ids = [
             m.get("features", {}).get("candidate_id", "") for m in members
         ]
-        sample = members[:3]
-        sample_texts = "\n".join(
-            f"- {m.get('features',{}).get('name','?')}: "
-            f"{m.get('features',{}).get('current_title','?')}, "
-            f"{m.get('features',{}).get('years_experience',0)} yrs, "
-            f"skills: {', '.join(m.get('features',{}).get('top_skills',[])[:4])}"
-            for m in sample
-        )
 
-        name, description, strength, gap = _generate_archetype(sample_texts, cluster_id)
+        name, description, strength, gap = _generate_archetype(cluster_id)
 
         clusters_out.append({
             "id": cluster_id,
@@ -49,40 +38,12 @@ def cluster_personas(top_candidates: list[dict], embeddings: np.ndarray) -> dict
     return {"clusters": clusters_out}
 
 
-def _generate_archetype(sample_texts: str, cluster_id: int) -> tuple[str, str, str, str]:
-    if not GROQ_API_KEY:
-        return (
-            f"Cluster {cluster_id + 1}",
-            "A group of similar candidates.",
-            "Diverse skill set.",
-            "Varied experience.",
-        )
-
-    try:
-        prompt = (
-            f"Here are 3 candidate profiles from a talent cluster:\n{sample_texts}\n\n"
-            f"Return a JSON object with exactly these keys:\n"
-            f"  name (3-4 word archetype, e.g. 'Deep ML Specialist'),\n"
-            f"  description (1 sentence on what unites them),\n"
-            f"  strength (their collective strength),\n"
-            f"  gap (their collective gap for a typical tech role)\n"
-            f"Return ONLY JSON, no markdown."
-        )
-        raw = generate_content(prompt, model=MODEL_NAME).strip()
-        raw = re.sub(r"^```(?:json)?\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
-        parsed = json.loads(raw)
-        return (
-            parsed.get("name", f"Cluster {cluster_id+1}"),
-            parsed.get("description", ""),
-            parsed.get("strength", ""),
-            parsed.get("gap", ""),
-        )
-    except Exception as e:
-        print(f"[Clustering] Archetype gen failed for cluster {cluster_id}: {e}")
-        return (
-            f"Talent Cluster {cluster_id + 1}",
-            "A cohesive group of candidates with shared background.",
-            "Consistent domain expertise.",
-            "Requires deeper evaluation.",
-        )
+def _generate_archetype(cluster_id: int) -> tuple[str, str, str, str]:
+    """Deterministic, local cluster labeling. No network call, no generative
+    model -- the name is always a plain numbered label."""
+    return (
+        f"Cluster {cluster_id + 1}",
+        "A group of candidates with similar profile embeddings.",
+        "Diverse skill set.",
+        "Varied experience.",
+    )

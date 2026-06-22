@@ -222,7 +222,7 @@ export default function CandidateProfile({ candidate: c, onBack }) {
           {n.exceptional && (
             <Section title="Exceptional Fit Signal">
               <Sentence>
-                This candidate has been flagged as an exceptional fit by the LLM scoring stage — their profile closely aligns with the specific requirements and culture signals in the job description beyond what scores alone capture.
+                This candidate has been flagged as an exceptional fit by the scoring engine — their profile closely aligns with the specific requirements and culture signals in the job description beyond what any single score captures.
               </Sentence>
             </Section>
           )}

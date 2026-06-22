@@ -1,11 +1,10 @@
 """
-Local-only JD parser. Zero network calls, zero LLM SDK imports.
+Local-only JD parser. Zero network calls, zero hosted-API dependencies.
 
-Used exclusively by scripts/rank.py, the compliant ranking entrypoint. Mirrors
-the output shape of src/pipeline/jd_parser.py (hard_skills, deal_breakers,
-seniority_years_min, culture_signals) so it is a drop-in replacement for
-everything fusion.compute_final_score reads, but never imports
-google.generativeai or any other hosted LLM client.
+Used by scripts/rank.py (the compliant ranking entrypoint) and the API's
+/api/rank route. Produces hard_skills, deal_breakers, seniority_years_min, and
+culture_signals from a hardcoded parse for the known challenge JD, with a
+regex-based fallback for any other input text.
 """
 
 import re

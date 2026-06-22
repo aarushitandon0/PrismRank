@@ -3,15 +3,14 @@
 Compliant ranking entrypoint for the Redrob Hackathon v4 submission.
 
 Produces the required top-100 ranked candidate CSV. Makes zero network calls
-and imports zero LLM SDKs anywhere in its call graph (verified against every
-module it touches: candidate_processor, embedder, behavioral, trajectory,
-honeypot, jd_local, local_scorer, fusion). Runs entirely on CPU.
+and has zero hosted-API dependencies anywhere in its call graph (verified
+against every module it touches: candidate_processor, embedder, behavioral,
+trajectory, honeypot, jd_local, local_scorer, fusion). Runs entirely on CPU.
 
 This script is what gets reproduced at Stage 3 inside the sandboxed Docker
-container. The interactive FastAPI/React dashboard (src/api, ui/) optionally
-uses Gemini for JD parsing nuance, persona naming, interview question
-generation, and recruiter chat -- none of that is used here, and none of it
-produces the scored submission.
+container. The interactive FastAPI/React dashboard (src/api, ui/) shares the
+same local scoring engine (src/pipeline/local_scorer.py) for consistency,
+and is not used to produce the scored submission.
 
 One-time setup, run once before the timed ranking step (see scripts/precompute.py
 for the full pre-computation pass -- this is the allowance the spec makes for
@@ -48,7 +47,7 @@ from src.pipeline.behavioral import score_behavioral
 from src.pipeline.trajectory import score_trajectory
 from src.pipeline.honeypot import detect_honeypot
 from src.pipeline.jd_local import parse_jd_local
-from src.pipeline.local_scorer import attach_local_llm_proxy, generate_reasoning, attach_dominant_signal_percentiles
+from src.pipeline.local_scorer import attach_local_scores, generate_reasoning, attach_dominant_signal_percentiles
 from src.pipeline.fusion import compute_final_score, rank_all
 from src.pipeline.precompute_cache import get_or_build_candidates, get_or_build_tfidf
 
@@ -99,7 +98,7 @@ def run(candidates_path: Path, jd_path: Path, out_path: Path) -> int:
         c["behavioral_score"] = score_behavioral(c["features"])
         c["trajectory"] = score_trajectory(c["features"])
         c["honeypot"] = detect_honeypot(c["features"])
-        attach_local_llm_proxy(c, jd_parsed, c["_cosine_score"])
+        attach_local_scores(c, jd_parsed, c["_cosine_score"])
 
     scored = [compute_final_score(c, jd_parsed) for c in pool]
     hp_count = sum(1 for c in scored if c["honeypot_score"] >= HONEYPOT_HARD_CUTOFF)
