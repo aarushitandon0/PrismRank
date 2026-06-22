@@ -22,16 +22,15 @@ The system was designed around the specific failure modes embedded in the challe
 
 **Capabilities at a glance:**
 
-- Three-stage retrieval: TF-IDF pre-filter (100K to 1K) + FAISS dense search (1K to 200) + Groq LLM re-ranking (200 to 100)
+- Two-stage retrieval: TF-IDF pre-filter (100K to 1K) + FAISS dense search (1K to 200), followed by fully local scoring (200 to 100) -- zero LLM calls anywhere in the ranking path
+- Blended skill alignment (FAISS cosine similarity + explicit hard-skill match ratio) and relevant-experience-weighted fit (career history scanned for JD-relevant roles, not just total tenure)
 - Five-component weighted score fusion with JD-specific multipliers
-- Eight-signal honeypot detector with score-based suppression
+- Eight-signal honeypot detector with hard exclusion from the top 100, not just score suppression
 - Trajectory scorer: velocity x tier progression x tenure stability
 - Twelve-signal behavioral scorer over Redrob platform data
-- KMeans persona clustering (k=5) with Groq-generated archetype names
+- Population-relative reasoning generator: sentence structure varies by which signal is genuinely most distinctive for each candidate, not one template with values filled in
 - Five-dimension fairness audit with Gini coefficient + skew ratio analysis
-- Automated interview pack generation (5 tailored questions per top-20 candidate)
-- Full React dashboard with recruiter chat, persona explorer, and bias report viewer
-- Graceful degraded mode when no Groq API key is present
+- An optional, separate interactive dashboard (React + FastAPI) with recruiter chat, persona clustering, and interview pack generation, which may use a hosted LLM for richer exploration but is never used to produce the scored submission
 
 ---
 
@@ -58,15 +57,74 @@ python scripts/precompute.py --candidates data/candidates.jsonl --jd data/job_de
 python scripts/rank.py --candidates data/candidates.jsonl --jd data/job_description.txt --out submission.csv
 ```
 
-**Why the LLM signals aren't just defaulted to 0.5:** in place of Gemini/Groq's `skill_alignment`, `experience_fit`, and `culture_fit`, `src/pipeline/local_scorer.py` substitutes the FAISS cosine similarity score already computed during retrieval, a rule-based comparison of years of experience against the JD's seniority floor, and culture-signal keyword overlap. None of these are placeholders -- they're real, differentiating signals computed without a network call.
-
 **Honeypot safety margin:** any candidate scoring `honeypot_score >= 0.55` is explicitly excluded from the top 100 before ranks are assigned (not just down-weighted), with a sorted backfill if fewer than 100 clean candidates remain in the retrieval pool. This keeps the submission's honeypot rate under the 10% Stage 3 disqualification threshold with real margin.
 
 A separate `/api/sandbox-rank` endpoint, used for the hosted sandbox/demo link, calls `scripts/rank.py`'s `run()` function directly rather than reimplementing any logic -- so the sandbox and the official submission script cannot drift out of sync.
 
 ---
 
-## System Architecture
+## Local Scoring Engine (the compliant path, `src/pipeline/local_scorer.py`)
+
+This is what actually produces `skill_alignment`, `experience_fit`, and `culture_fit` for the official submission. No call in this module touches a network or a hosted LLM. Each signal is a deterministic formula over fields already present in the candidate's profile.
+
+### Skill Alignment
+
+A blend of two independent signals, not a single reused value:
+
+```
+semantic = clamp(faiss_cosine_similarity, 0, 1)   # already computed during retrieval
+match_ratio = (count of candidate skills overlapping JD hard_skills) / (total JD hard_skills)
+
+skill_alignment = 0.65 * semantic + 0.35 * match_ratio
+```
+
+The blend matters because the semantic half is the same score that already determined whether a candidate survived FAISS retrieval, so using it alone would add no new information to the fusion score. The explicit match-ratio half rewards candidates who literally list the JD's named skills, independent of embedding similarity.
+
+### Experience Fit
+
+A blend of total tenure and *relevant* tenure, directly reflecting the job description's own distinction between total years and years specifically in applied roles:
+
+```
+relevant_years = sum(duration_months for each career role whose title or
+                      description mentions a JD hard skill) / 12
+
+band_score(value, floor) =
+    1.0                          if floor <= value <= floor + 6
+    max(0.25, 1 - (floor - value) * 0.15)   if value < floor
+    max(0.40, 1 - (value - floor - 6) * 0.04) otherwise
+
+total_fit     = band_score(years_experience, jd_seniority_floor)
+relevant_fit  = band_score(relevant_years, jd_seniority_floor - 1.5)
+
+experience_fit = 0.4 * total_fit + 0.6 * relevant_fit
+```
+
+Relevant years are weighted more heavily than total years. A candidate with eight years of experience where only one year touched a JD-relevant skill scores meaningfully lower than a candidate with the same total tenure spent entirely in relevant roles -- this is what catches candidates whose listed skills are not substantiated by their actual career history, exactly the trap the job description warns about. Verified during testing: a real candidate listing NLP, LoRA, and Milvus as skills, with career history entirely in Kafka/Spark data engineering roles, scored `relevant_years = 0` despite four nominal skill matches.
+
+### Culture Fit
+
+Keyword overlap between the candidate's career history text and the JD's extracted culture signals (a small fixed list such as "async-first," "move fast"). Intentionally narrow: the heavier JD-specific business rules (consulting penalty, product-company boost) already live in the fusion layer's multipliers, applied separately.
+
+### Reasoning Generation
+
+No reasoning sentence is generated by an LLM. Every sentence is assembled from a fixed set of templates filled with real fields from the candidate's profile (name, title, company, years of experience, matched skills, notice period, trajectory label).
+
+To avoid producing the same sentence shape for every candidate, the opener's structure is chosen by which of four signals (skill, experience, trajectory, behavioral) is most distinctive for that specific candidate **relative to the rest of the final shortlist**, not by raw signal magnitude:
+
+```
+for each of the four signals, rank this candidate's value against
+every other candidate in the final top-100 (percentile rank)
+
+dominant_signal = whichever signal has this candidate's highest percentile
+```
+
+This is crossed with a confidence tier derived from rank (high for ranks 1-10, medium for 11-40, low for 41-100), giving twelve distinct structural combinations. Percentile-based comparison was a deliberate fix: an earlier version compared raw signal magnitudes directly, and because `experience_fit`'s band formula is structurally easier to score high on than the other three signals, it mechanically dominated nearly every candidate's reasoning regardless of what was actually distinctive about them. Verified by inspecting a real 100-candidate run: after the fix, dominant-signal selection was roughly evenly distributed (27 skill, 23 experience, 24 trajectory, 26 behavioral) rather than concentrated on one signal.
+
+---
+
+## System Architecture (Optional Interactive Dashboard)
+
+The diagram below describes `src/api/` and the React dashboard, an optional, separate tool for exploration and demos. **It is not used to produce the official submission CSV.** It may call a hosted LLM (Groq) for richer re-ranking, persona naming, interview question generation, and recruiter chat, none of which the hackathon's compute constraints apply to, since those constraints only govern the ranking step that produces the scored submission (`scripts/rank.py`, documented above, which never calls an LLM).
 
 ```
   ┌─────────────────────────────────────────────────────────────┐
@@ -253,9 +311,11 @@ scores, indices = index.search(jd_vector, k=200)
 
 Embeddings are cached to disk using an MD5 key derived from the model name and the first 50 profile texts, allowing subsequent runs to skip re-encoding entirely.
 
-### Stage 3 — Groq (Llama 3.3 70B) Re-ranking
+### Stage 3 — Local Scoring (compliant path) / Optional LLM Re-ranking (dashboard only)
 
-Each of the 200 candidates is scored by Groq (Llama 3.3 70B) in batches of 10. The LLM receives the job description and a structured candidate summary, and returns a JSON object per candidate:
+**Compliant path (`scripts/rank.py`, produces the submission):** each of the 200 candidates is scored by `src/pipeline/local_scorer.py`, computing `skill_alignment`, `experience_fit`, and `culture_fit` with the formulas documented above in "Local Scoring Engine." Zero network calls.
+
+**Dashboard-only path (`src/api/routes.py`, optional, not used for the submission):** the same 200 candidates may instead be scored by Groq (Llama 3.3 70B) in batches of 10, which returns a JSON object per candidate including `gap_alert` and `standout_signal` free-text fields for the richer demo UI:
 
 ```json
 {
@@ -268,7 +328,7 @@ Each of the 200 candidates is scored by Groq (Llama 3.3 70B) in batches of 10. T
 }
 ```
 
-The LLM scores are grounded in career history, not keyword lists, which is the key differentiator from the TF-IDF and FAISS stages. A candidate listing "PyTorch" as a skill but having zero AI roles in their career receives a low `skill_alignment` from Groq even if they passed the lexical stages.
+Both paths populate the exact same `skill_alignment` / `experience_fit` / `culture_fit` fields consumed by the fusion layer below, so the rest of the scoring pipeline (JD multipliers, honeypot suppression, tiering) runs identically regardless of which path produced them.
 
 ---
 
@@ -278,13 +338,13 @@ The final score for each candidate is computed as a weighted linear combination 
 
 ### Base Weights
 
-| Signal | Weight | Source |
-|---|---|---|
-| `skill_alignment` | 30% | Groq (Llama 3.3 70B) |
-| `experience_fit` | 25% | Groq (Llama 3.3 70B) |
-| `behavioral_score` | 20% | 12-signal Redrob scorer |
-| `redrob_signals` | 15% | Platform activity (completeness, notice, views) |
-| `culture_fit` | 10% | Groq (Llama 3.3 70B) |
+| Signal | Weight | Source (compliant path) | Source (dashboard only) |
+|---|---|---|---|
+| `skill_alignment` | 30% | FAISS cosine similarity blended with hard-skill match ratio | Groq (Llama 3.3 70B) |
+| `experience_fit` | 25% | Total-years and relevant-years band scores, blended | Groq (Llama 3.3 70B) |
+| `behavioral_score` | 20% | 12-signal Redrob scorer | Same |
+| `redrob_signals` | 15% | Platform activity (completeness, notice, views) | Same |
+| `culture_fit` | 10% | JD culture-signal keyword overlap | Groq (Llama 3.3 70B) |
 
 ```
 weighted = (
@@ -334,7 +394,7 @@ honeypot_multiplier = 1.0 - (honeypot_score * 0.8)
 final_score = weighted * honeypot_multiplier
 ```
 
-A candidate with `honeypot_score = 0.80` receives a `0.36×` suppression, effectively removing them from the top 100 regardless of LLM scores.
+A candidate with `honeypot_score = 0.80` receives a `0.36×` suppression, effectively removing them from the top 100 regardless of their other scores. In `scripts/rank.py`, this is further backed by a hard exclusion: any candidate at or above `honeypot_score = 0.55` is removed from consideration before ranks are even assigned, not merely down-weighted.
 
 ### Tier Assignment
 
@@ -535,7 +595,7 @@ Example archetype names generated during competition run:
 |---|---|---|
 | Runtime | Python | 3.11 |
 | API framework | FastAPI + Uvicorn | latest |
-| LLM | Groq (Llama 3.3 70B) | `llama-3.3-70b-versatile` |
+| LLM (dashboard only, not used for ranking) | Groq (Llama 3.3 70B) | `llama-3.3-70b-versatile` |
 | Embeddings | sentence-transformers, all-MiniLM-L6-v2 | latest |
 | Vector index | FAISS, IndexFlatIP | latest |
 | Lexical retrieval | scikit-learn TfidfVectorizer | latest |
@@ -572,15 +632,24 @@ prismrank/
       candidate_processor.py    # JSONL parsing, profile text builder, feature extractor
       embedder.py               # TF-IDF pre-filter, sentence-transformer encoding,
                                 # FAISS index builder, embedding cache management
-      jd_parser.py              # JD parsing via Groq; regex fallback
-      llm_scorer.py             # Groq re-ranking, batched 10 candidates/call
+      precompute_cache.py       # Disk caches for the compliant ranker (parsed
+                                # candidates, TF-IDF vectorizer/matrix), keyed by
+                                # candidates file size/mtime
+      jd_local.py               # LOCAL JD parser, zero LLM SDK imports -- used by
+                                # scripts/rank.py for the official submission
+      local_scorer.py           # LOCAL skill_alignment / experience_fit / culture_fit
+                                # substitutes, plus the population-aware reasoning
+                                # generator -- this is what produces the submission's
+                                # scores and reasoning text, zero network calls
+      jd_parser.py              # JD parsing via Groq; regex fallback (dashboard only)
+      llm_scorer.py             # Groq re-ranking, batched 10 candidates/call (dashboard only)
       behavioral.py             # 12-signal Redrob behavioral scorer
       trajectory.py             # Velocity x tier progression x tenure scorer
       honeypot.py               # 8-signal trap candidate detector
       fusion.py                 # Weighted fusion, JD multipliers, honeypot suppression
-      clustering.py             # KMeans clustering, Groq archetype naming
+      clustering.py             # KMeans clustering, Groq archetype naming (dashboard only)
       bias_audit.py             # Gini coefficient, skew ratio fairness audit
-      interview_gen.py          # Interview pack generation, top-20 candidates
+      interview_gen.py          # Interview pack generation, top-20 candidates (dashboard only)
 
     frontend/
       dist/                     # Compiled React app (served by FastAPI at /)
@@ -593,14 +662,23 @@ prismrank/
     vite.config.js              # Dev proxy to :8080, outDir to ../src/frontend/dist
 
   scripts/
-    run_pipeline.py             # Standalone pipeline runner (no API)
+    rank.py                     # COMPLIANT ranking entrypoint -- produces the official
+                                # submission CSV. Zero network calls, zero LLM SDK
+                                # imports anywhere in its import graph, CPU only.
+    precompute.py                # Untimed cache-warming pass, run once before rank.py
+    run_pipeline.py             # Groq-enabled standalone CLI demo runner
+                                # (not used for the submission)
 
   output/
-    submission.csv              # Top-100 ranked candidates with scores
+    submission.csv              # Dashboard's output (different file, different
+                                # purpose -- not the submission)
     bias_report.json            # Full fairness audit
     interview_pack.json         # 5 questions x top-20 candidates
     embedding_cache/            # Cached .npy embedding arrays
+    precompute_cache/            # Cached parsed candidates + TF-IDF vectorizer/matrix
 
+  team_xxx.csv                  # The actual submission, produced by scripts/rank.py
+  submission_metadata.yaml
   requirements.txt
   .gitignore
   README.md
@@ -693,9 +771,9 @@ All retrieval (TF-IDF, FAISS), scoring (behavioral, trajectory, honeypot), fusio
 
 | Variable | Required | Description |
 |---|---|---|
-| `GROK_API_KEY` | No | Google AI Studio API key for LLM re-ranking, JD parsing, persona naming, and recruiter chat |
+| `GROK_API_KEY` | No | Groq API key (despite the variable name, this is a Groq key, prefixed `gsk_`). Used only by the optional interactive dashboard for re-ranking, JD parsing, persona naming, and recruiter chat. Never read by `scripts/rank.py`. |
 
-Get a key at: https://aistudio.google.com/app/apikey
+Get a key at: https://console.groq.com/keys
 
 ---
 
@@ -732,9 +810,17 @@ Verified locally on a 50-candidate sample: completes in ~16 seconds, produces a 
 
 ## Outputs
 
-### `output/submission.csv`
+### `team_xxx.csv` (the actual hackathon submission, produced by `scripts/rank.py`)
 
-One row per top-100 candidate. Columns include:
+Exactly 100 rows, 4 columns, matching the hackathon's required schema:
+
+```
+candidate_id, rank, score, reasoning
+```
+
+### `output/submission.csv` (dashboard output, not the submission)
+
+Produced by the optional interactive dashboard when run interactively. A much richer schema for the demo UI, since the dashboard surfaces every score component visually:
 
 ```
 rank, candidate_id, name, final_score, tier, exceptional_fit,
